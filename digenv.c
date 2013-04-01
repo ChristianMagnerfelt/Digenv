@@ -19,7 +19,7 @@ void initPipes();
 void setPager();
 
 /* Executes a program in a different process using fork */
-void executeProcess(int in, int out, const char * program, char * argv[]);
+pid_t executeProcess(int in, int out, char * program, char * argv[]);
 
 /* Waits for processes to exit */
 void waitForProcesses();
@@ -27,43 +27,43 @@ void waitForProcesses();
 /* Kills all process children that are child to this process */
 void killChildren();
 
+void closeFileDescriptors();
+
 /* Declaration of wait */
 int wait(int * status);
 
 
-
-
-
 int main (int argc, char * argv [])
 {
-	int pipeOffset = 0;
+	
 	g_numPipes = (argc > 1)? 3: 2;
 	g_numProcs = g_numPipes + 1;
 	
+	int offset = (g_numProcs == 4)? 1: 0;
+
 	/* Initialize pipes */
 	initPipes();
 
 	/* Set pager */
 	setPager();
 	
-	
 	/* Execute printenv */
-	executeProcess(STDIN_FILENO, g_pipes[pipeOffset][1], "printenv", argv);
-	pipeOffset++;
+	g_procID[0] = executeProcess(STDIN_FILENO, g_pipes[0][1], "printenv", argv);
 
 	/* Check and execute grep */
 	if(g_numPipes == 3)
 	{
-		executeProcess(g_pipes[pipeOffset - 1][0], g_pipes[pipeOffset][1], "grep", argv);
-		pipeOffset++;	
+		g_procID[1] = executeProcess(g_pipes[0][0], g_pipes[offset][1], "grep", argv);
 	}
 
 	/* Execute sort */
-	executeProcess(g_pipes[pipeOffset - 1][0], g_pipes[pipeOffset][1], "sort", argv);
-	pipeOffset++;
+	g_procID[offset + 1] = executeProcess(g_pipes[offset][0], g_pipes[offset + 1][1], "sort", argv);
 
 	/* Execute less or more */
- 	executeProcess(g_pipes[pipeOffset - 1][0], STDOUT_FILENO, "less", argv);
+ 	g_procID[offset + 2] = executeProcess(g_pipes[offset + 1][0], STDOUT_FILENO, "less", argv);
+
+	/* Close all file descriptors*/
+	closeFileDescriptors();
 
 	/* Wait for all processes to finish */
 	waitForProcesses();
@@ -93,7 +93,7 @@ void setPager()
 	}
 	fprintf(stderr, "Pager set to '%s'\n", g_pager);
 }
-void executeProcess(int in, int out, const char * program, char * argv[])
+pid_t executeProcess(int in, int out, char * program, char * argv[])
 {
 	pid_t id = fork();
 	if(id == 0)
@@ -115,40 +115,41 @@ void executeProcess(int in, int out, const char * program, char * argv[])
 			}
 		}
 		/* Close all file descriptors*/
-		{
-			int i;
-			for(i = 0; i < g_numPipes; i++)
-			{
-				int j;
-				for(j = 0; j < 2; j++)
-				{
-						close(g_pipes[i][j]);
-				}
-			}
-		}
+		closeFileDescriptors();
+
+		fprintf(stderr, "Executing %s %d\n", program, getpid());
+
 		/* Execute program */
 		if(!strcmp(program, "grep"))
 		{
-			int rc = execvp(program, argv);
-			fprintf(stderr, "Execvp %s failed %d\n", program, rc);
+			execvp(program, argv);
+			fprintf(stderr, "Execvp %s failed %d\n", program, errno);
 			exit(1);
 		}
 		else if(!strcmp(program, g_pager))
 		{
-			execvp(program, argv);
-
+			{
+				char * ptr [2] = {program, (char*) NULL};
+				execvp(program, ptr);
+			}
 			/* Default to more */
-			int rc = execvp("more", argv);
-			fprintf(stderr, "Execvp %s and more failed %d\n", program, rc);
+			{
+				char * ptr [2] = {"more", (char*) NULL};
+				execvp("more", ptr);
+			}
+			fprintf(stderr, "Execvp %s and more failed %d\n", program, errno);
 			exit(1);		
 		}
 		else
 		{
-			int rc = execvp(program, argv);
-			fprintf(stderr, "Execvp %s failed %d\n", program, rc);
+			char * ptr [2] = {program, (char*) NULL};
+			execvp(program, ptr);
+			fprintf(stderr, "Execvp %s failed %d\n", program, errno);
 			exit(1);
 		}
+		
 	}
+	return id;
 }
 void waitForProcesses()
 {
@@ -171,6 +172,7 @@ void waitForProcesses()
 			fprintf(stderr, "Child %d exited normally\n", child);
 		}
 	}
+	fprintf(stderr, "All childs exited successfully\n");
 }
 void killChildren()
 {
@@ -179,5 +181,17 @@ void killChildren()
 	{
 		if(g_procID[i] != 0) 
 			kill(g_procID[i], SIGKILL);
+	}
+}
+void closeFileDescriptors()
+{
+	int i;
+	for(i = 0; i < g_numPipes; i++)
+	{
+		int j;
+		for(j = 0; j < 2; j++)
+		{
+				close(g_pipes[i][j]);
+		}
 	}
 }
