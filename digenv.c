@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <signal.h>
+#include <string.h>
 
 int g_numPipes = 0;
 int g_numProcs = 0;
@@ -17,8 +18,8 @@ void initPipes();
 /* Sets pager */
 void setPager();
 
-/* Executes a command in a different process using fork */
-void executeProcess(int in, int out, const char * command, int argc, char * argv[]);
+/* Executes a program in a different process using fork */
+void executeProcess(int in, int out, const char * program, char * argv[]);
 
 /* Waits for processes to exit */
 void waitForProcesses();
@@ -47,22 +48,22 @@ int main (int argc, char * argv [])
 	
 	
 	/* Execute printenv */
-	executeProcess(STDIN_FILENO, g_pipes[pipeOffset][1], "printenv", argc, argv);
+	executeProcess(STDIN_FILENO, g_pipes[pipeOffset][1], "printenv", argv);
 	pipeOffset++;
 
 	/* Check and execute grep */
 	if(g_numPipes == 3)
 	{
-		executeProcess(g_pipes[pipeOffset - 1][0], g_pipes[pipeOffset][1], "grep", argc, argv);
+		executeProcess(g_pipes[pipeOffset - 1][0], g_pipes[pipeOffset][1], "grep", argv);
 		pipeOffset++;	
 	}
 
 	/* Execute sort */
-	executeProcess(g_pipes[pipeOffset - 1][0], g_pipes[pipeOffset][1], "sort", argc, argv);
+	executeProcess(g_pipes[pipeOffset - 1][0], g_pipes[pipeOffset][1], "sort", argv);
 	pipeOffset++;
 
 	/* Execute less or more */
- 	executeProcess(g_pipes[pipeOffset - 1][0], STDOUT_FILENO, "less", argc, argv);
+ 	executeProcess(g_pipes[pipeOffset - 1][0], STDOUT_FILENO, "less", argv);
 
 	/* Wait for all processes to finish */
 	waitForProcesses();
@@ -92,9 +93,62 @@ void setPager()
 	}
 	fprintf(stderr, "Pager set to '%s'\n", g_pager);
 }
-void executeProcess(int in, int out, const char * command, int argc, char * argv[])
+void executeProcess(int in, int out, const char * program, char * argv[])
 {
-	
+	pid_t id = fork();
+	if(id == 0)
+	{
+		/* Dubplicate file descriptors in and out to stdin and stdout respectively */
+		{
+			int rc;
+			rc = dup2(in, STDIN_FILENO);
+			if(rc == -1 )
+			{
+				fprintf(stderr, "dup2 failed %d\n", errno);
+				exit(1);
+			}
+			rc = dup2(out, STDOUT_FILENO);
+			if(rc == -1 )
+			{
+				fprintf(stderr, "dup2 failed %d\n", errno);
+				exit(1);
+			}
+		}
+		/* Close all file descriptors*/
+		{
+			int i;
+			for(i = 0; i < g_numPipes; i++)
+			{
+				int j;
+				for(j = 0; j < 2; j++)
+				{
+						close(g_pipes[i][j]);
+				}
+			}
+		}
+		/* Execute program */
+		if(!strcmp(program, "grep"))
+		{
+			int rc = execvp(program, argv);
+			fprintf(stderr, "Execvp %s failed %d\n", program, rc);
+			exit(1);
+		}
+		else if(!strcmp(program, g_pager))
+		{
+			execvp(program, argv);
+
+			/* Default to more */
+			int rc = execvp("more", argv);
+			fprintf(stderr, "Execvp %s and more failed %d\n", program, rc);
+			exit(1);		
+		}
+		else
+		{
+			int rc = execvp(program, argv);
+			fprintf(stderr, "Execvp %s failed %d\n", program, rc);
+			exit(1);
+		}
+	}
 }
 void waitForProcesses()
 {
