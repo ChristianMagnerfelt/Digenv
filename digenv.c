@@ -1,3 +1,24 @@
+/*
+ * NAME:
+ *	digenv	-	view environment variables in alphabetical order using the default pager
+ * 
+ * SYNTAX:
+ *	digenv [PATTERN]
+ *
+ * DESCRIPTION:
+ *	Digenv sorts all environment variables in alphabetical order and displays them in
+ *	the default pager (as specified by PAGER in the env. vars.), 'less' if no default pager
+ *	is specified and 'more' if 'less' is not installed. 
+ *
+ *	The environment variables can also be filtered by using a regex pattern as one would
+ *	when running grep.
+ *
+ * AUTHOR:
+ *	Daniel Molin <dmol@kth.se>
+ *	Christian Magnerfelt <christian.magnerfelt@gmail.com>
+ */
+
+
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
