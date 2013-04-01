@@ -146,6 +146,11 @@ pid_t executeProcess(int in, int out, char * program, char * argv[])
 		}
 		
 	}
+	else if (id == -1)
+	{
+		fprintf(stderr, "fork() failed %d\n", errno);
+		exit(1);
+	}
 	return id;
 }
 void waitForProcesses()
@@ -172,7 +177,13 @@ void killChildren()
 	for(i = 0; i < g_numProcs; i++)
 	{
 		if(g_procID[i] != 0) 
-			kill(g_procID[i], SIGKILL);
+		{
+			int rc = kill(g_procID[i], SIGKILL);
+			if(rc == -1)
+			{
+				fprintf(stderr, "kill of %d failed in killChildren() %d\n", g_procID[i], errno);
+			}
+		}
 	}
 }
 void closeFileDescriptors()
@@ -183,7 +194,11 @@ void closeFileDescriptors()
 		int j;
 		for(j = 0; j < 2; j++)
 		{
-				close(g_pipes[i][j]);
+			int rc = close(g_pipes[i][j]);
+			if(rc == -1)
+			{
+				fprintf(stderr, "failed to close pipe g_pipes[%d][%d] == %d (errno: %d)\n", i, j, g_pipes[i][j], errno);
+			}
 		}
 	}
 }
