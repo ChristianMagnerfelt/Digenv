@@ -35,7 +35,6 @@ int wait(int * status);
 
 int main (int argc, char * argv [])
 {
-	
 	g_numPipes = (argc > 1)? 3: 2;
 	g_numProcs = g_numPipes + 1;
 	
@@ -117,8 +116,6 @@ pid_t executeProcess(int in, int out, char * program, char * argv[])
 		/* Close all file descriptors*/
 		closeFileDescriptors();
 
-		fprintf(stderr, "Executing %s %d\n", program, getpid());
-
 		/* Execute program */
 		if(!strcmp(program, "grep"))
 		{
@@ -167,12 +164,7 @@ void waitForProcesses()
 			killChildren();
 			exit(1);
 		}
-		else
-		{
-			fprintf(stderr, "Child %d exited normally\n", child);
-		}
 	}
-	fprintf(stderr, "All childs exited successfully\n");
 }
 void killChildren()
 {
