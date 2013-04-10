@@ -26,12 +26,12 @@
 #include <signal.h>
 #include <string.h>
 
-int g_numPipes = 0;
-int g_numProcs = 0;
-int g_pipes[3][2] = {{0,0},{0,0},{0,0}};
-pid_t g_procID[4] = {0, 0, 0, 0};
+int g_numPipes = 0;							/* Number of pipes used in communication between processes */
+int g_numProcs = 0;							/* Number of processes used in the pipeline */
+int g_pipes[3][2] = {{0,0},{0,0},{0,0}};	/* IN, OUT file descriptors for each process */
+pid_t g_procID[4] = {0, 0, 0, 0};			/* Process ID of each child process */
 
-char * g_pager = NULL;
+char * g_pager = NULL;						/* The pager used at the end of the pipeline */
 
 /* Initialize pipes */
 void initPipes();
@@ -56,10 +56,12 @@ int wait(int * status);
 
 int main (int argc, char * argv [])
 {
-	g_numPipes = (argc > 1)? 3: 2;
+	/* In case of command line arguments, add an extra process and pipe for grep */
+	g_numPipes = (argc > 1)? 3: 2;	
 	g_numProcs = g_numPipes + 1;
 	
-	int offset = (g_numProcs == 4)? 1: 0;
+	/* Adjust offset if we are using 3 or 4 processes */
+	int offset = (g_numProcs == 4)? 1: 0;	
 
 	/* Initialize pipes */
 	initPipes();
@@ -113,6 +115,14 @@ void setPager()
 	}
 	fprintf(stderr, "Pager set to '%s'\n", g_pager);
 }
+/*
+ *	Executes a 'program' in a separate process using 'in' and 'out' as inter process communication.
+ *		
+ *	executeProcess start by duplicating 'in' and 'out' parameters to stdin and stdout in order to communicate with
+ *	other processes in the pipeline. When file descriptors have been duplicated then remaining file descriptors are closed 
+ *	in order to avoid deadlocks. Finally the 'program' is executed using execvp. If the program runs successfully this function will
+ *	never return.
+ */
 pid_t executeProcess(int in, int out, char * program, char * argv[])
 {
 	pid_t id = fork();
