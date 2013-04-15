@@ -53,9 +53,14 @@ void closeFileDescriptors();
 /* Declaration of wait */
 int wait(int * status);
 
+/* Handler for interrupt signal */
+void sigIntHandler(int signum);
 
 int main (int argc, char * argv [])
 {
+	/* Setup interrupt signal handler */
+	signal(SIGINT, sigIntHandler);
+
 	/* In case of command line arguments, add an extra process and pipe for grep */
 	g_numPipes = (argc > 1)? 3: 2;	
 	g_numProcs = g_numPipes + 1;
@@ -232,4 +237,10 @@ void closeFileDescriptors()
 			}
 		}
 	}
+}
+void sigIntHandler(int signum)
+{
+	fprintf(stderr, "Process was interrupted: %d, abort\n", signum);
+	killChildren();
+	exit(1);	
 }
