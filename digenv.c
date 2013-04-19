@@ -25,6 +25,7 @@
 #include <errno.h>
 #include <signal.h>
 #include <string.h>
+#include <sys/wait.h>
 
 int g_numPipes = 0;							/* Number of pipes used in communication between processes */
 int g_numProcs = 0;							/* Number of processes used in the pipeline */
