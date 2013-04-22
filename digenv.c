@@ -1,14 +1,14 @@
 /*
  * NAME:
  *	digenv	-	view environment variables in alphabetical order using the default pager
- * 
+ *
  * SYNTAX:
  *	digenv [PATTERN]
  *
  * DESCRIPTION:
  *	Digenv sorts all environment variables in alphabetical order and displays them in
  *	the default pager (as specified by PAGER in the env. vars.), 'less' if no default pager
- *	is specified and 'more' if 'less' is not installed. 
+ *	is specified and 'more' if 'less' is not installed.
  *
  *	The environment variables can also be filtered by using a regex pattern as one would
  *	when running grep.
@@ -46,7 +46,7 @@ pid_t executeProcess(int in, int out, char * program, char * argv[]);
 /* Waits for processes to exit */
 void waitForProcesses();
 
-/* Kills all process children that are child to this process */
+/* Kills all child processes of this process */
 void killChildren();
 
 void closeFileDescriptors();
@@ -63,18 +63,18 @@ int main (int argc, char * argv [])
 	signal(SIGINT, sigIntHandler);
 
 	/* In case of command line arguments, add an extra process and pipe for grep */
-	g_numPipes = (argc > 1)? 3: 2;	
+	g_numPipes = (argc > 1)? 3: 2;
 	g_numProcs = g_numPipes + 1;
-	
+
 	/* Adjust offset if we are using 3 or 4 processes */
-	int offset = (g_numProcs == 4)? 1: 0;	
+	int offset = (g_numProcs == 4)? 1: 0;
 
 	/* Initialize pipes */
 	initPipes();
 
 	/* Set pager */
 	setPager();
-	
+
 	/* Execute printenv */
 	g_procID[0] = executeProcess(STDIN_FILENO, g_pipes[0][1], "printenv", argv);
 
@@ -122,12 +122,14 @@ void setPager()
 	fprintf(stderr, "Pager set to '%s'\n", g_pager);
 }
 /*
- *	Executes a 'program' in a separate process using 'in' and 'out' as inter process communication.
- *		
- *	executeProcess start by duplicating 'in' and 'out' parameters to stdin and stdout in order to communicate with
- *	other processes in the pipeline. When file descriptors have been duplicated then remaining file descriptors are closed 
- *	in order to avoid deadlocks. Finally the 'program' is executed using execvp. If the program runs successfully this function will
+ *	Executes a 'program' in a separate process using 'in' and 'out' as inter-process communication.
+ *
+ *	executeProcess starts by duplicating 'in' and 'out' parameters to stdin and stdout in order to communicate with
+ *	other processes in the pipeline. When file descriptors have been duplicated, the remaining file descriptors are closed
+ *	in order to avoid deadlocks. Finally the 'program' is executed using execvp. If the program runs successfully, execvp will
  *	never return.
+ *
+ *  executeProcess returns the pid of the new child process.
  */
 pid_t executeProcess(int in, int out, char * program, char * argv[])
 {
@@ -156,32 +158,38 @@ pid_t executeProcess(int in, int out, char * program, char * argv[])
 		/* Execute program */
 		if(!strcmp(program, "grep"))
 		{
+			/* Execute grep */
 			execvp(program, argv);
 			fprintf(stderr, "Execvp %s failed %d\n", program, errno);
 			exit(1);
 		}
 		else if(!strcmp(program, g_pager))
 		{
+			/* Execute pager */
 			{
-				char * ptr [2] = {program, (char*) NULL};
+				/* Try to execute less */
+				char * ptr [2] = {program, (char*) NULL}; /* the argv array */
 				execvp(program, ptr);
 			}
-			/* Default to more */
+
 			{
-				char * ptr [2] = {"more", (char*) NULL};
+				/* Default to more */
+				char * ptr [2] = {"more", (char*) NULL}; /* the argv array */
 				execvp("more", ptr);
 			}
+
 			fprintf(stderr, "Execvp %s and more failed %d\n", program, errno);
-			exit(1);		
+			exit(1);
 		}
 		else
 		{
-			char * ptr [2] = {program, (char*) NULL};
+			/* Execute other program */
+			char * ptr [2] = {program, (char*) NULL}; /* the argv array */
 			execvp(program, ptr);
 			fprintf(stderr, "Execvp %s failed %d\n", program, errno);
 			exit(1);
 		}
-		
+
 	}
 	else if (id == -1)
 	{
@@ -190,6 +198,10 @@ pid_t executeProcess(int in, int out, char * program, char * argv[])
 	}
 	return id;
 }
+
+/*
+*	Waits for all child processes to finish to prevent zombies.
+*/
 void waitForProcesses()
 {
 	int i;
@@ -208,12 +220,16 @@ void waitForProcesses()
 		}
 	}
 }
+
+/*
+ * 	Kills all child processes.
+ */
 void killChildren()
 {
 	int i;
 	for(i = 0; i < g_numProcs; i++)
 	{
-		if(g_procID[i] != 0) 
+		if(g_procID[i] != 0)
 		{
 			int rc = kill(g_procID[i], SIGKILL);
 			if(rc == -1)
@@ -223,6 +239,10 @@ void killChildren()
 		}
 	}
 }
+
+/*
+ * Closes all file descriptors in g_pipes
+ */
 void closeFileDescriptors()
 {
 	int i;
@@ -239,9 +259,14 @@ void closeFileDescriptors()
 		}
 	}
 }
+
+/*
+ *	Signal handler for interrupts (and other signals). Makes the process
+ *	kill all child processes when interrupted, preventing zombies.
+ */
 void sigIntHandler(int signum)
 {
 	fprintf(stderr, "Process was interrupted: %d, abort\n", signum);
 	killChildren();
-	exit(1);	
+	exit(1);
 }
